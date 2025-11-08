@@ -29,18 +29,6 @@ enum ENUM_SL_MODE
    SL_DYNAMIC          // Dynamic (to Price Level)
 };
 
-enum ENUM_TP_MODE
-{
-   TP_RR_MULTIPLE,     // Risk/Reward Multiple
-   TP_DYNAMIC          // Dynamic (to Price Level)
-};
-
-enum ENUM_TP_METHOD
-{
-   TP_STANDARD,        // Standard TP
-   TP_PARTIAL_EXITS    // Partial Exits
-};
-
 enum ENUM_DISPLAY_MODE
 {
    DISPLAY_IDEAL,           // Ideal (No Entry Slippage)
@@ -92,7 +80,6 @@ input string inpSLExecuteSoundFile = "alert.wav";            // Sound File Name
 
 //--- Break-Even - Auto Execution
 input group "===== Break-Even - Auto Execution ====="
-input bool inpAutoMoveToBE_Standard = false;                // Auto Move SL to BE (Standard TP)
 input bool inpAutoMoveToBE_Partial = false;                 // Auto Move SL to BE (Partial Exits)
 input int inpBETriggerLevel = 1;                            // BE Trigger at TP Level (1, 2, or 3)
 input double inpBEOffsetPips = 0.0;                         // BE Offset (pips above/below entry)
@@ -108,18 +95,6 @@ input string inpBESoundFile = "alert.wav";                  // Sound File Name
 //--- Take Profit Settings
 input group "===== Take Profit Settings ====="
 input bool inpShowTP = true;                                 // Show Take Profit Lines
-input ENUM_TP_METHOD inpTPMethod = TP_STANDARD;             // Take Profit Method
-input ENUM_TP_MODE inpTPMode = TP_RR_MULTIPLE;              // Take Profit Mode (Standard)
-input double inpRRMultiple = 2.0;                           // Risk/Reward Multiple (Standard)
-
-//--- Standard TP - Auto Execution
-input group "===== Standard TP - Auto Execution ====="
-input bool inpAutoExecuteStandardTP = false;                // Auto Execute at Standard TP
-input bool inpStandardTPExecuteEnableAlert = true;          // Enable Alert Notification
-input bool inpStandardTPExecuteEnableSound = true;          // Enable Sound Notification
-input bool inpStandardTPExecuteEnablePush = true;           // Enable Push Notification
-input bool inpStandardTPExecuteEnableEmail = false;         // Enable Email Notification
-input string inpStandardTPExecuteSoundFile = "alert.wav";   // Sound File Name
 
 //--- Partial Exits Settings
 input group "===== Partial Exits ====="
@@ -403,8 +378,8 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void ManageBreakEven()
 {
-   // Exit if both BE features are disabled
-   if(!inpAutoMoveToBE_Partial && !inpAutoMoveToBE_Standard)
+   // Exit if BE feature is disabled
+   if(!inpAutoMoveToBE_Partial)
       return;
 
    // Loop through all positions
@@ -432,34 +407,19 @@ void ManageBreakEven()
       bool shouldMoveToBE = false;
 
       // ===== PARTIAL EXITS MODE =====
-      if(inpAutoMoveToBE_Partial && inpTPMethod == TP_PARTIAL_EXITS)
-      {
-         // Determine trigger price based on level
-         if(inpBETriggerLevel == 1)
-            triggerPrice = calc.partialTP1Price;
-         else if(inpBETriggerLevel == 2)
-            triggerPrice = calc.partialTP2Price;
-         else if(inpBETriggerLevel == 3)
-            triggerPrice = calc.partialTP3Price;
+      // Determine trigger price based on level
+      if(inpBETriggerLevel == 1)
+         triggerPrice = calc.partialTP1Price;
+      else if(inpBETriggerLevel == 2)
+         triggerPrice = calc.partialTP2Price;
+      else if(inpBETriggerLevel == 3)
+         triggerPrice = calc.partialTP3Price;
 
-         // Check if price has reached trigger
-         if(posType == POSITION_TYPE_BUY)
-            shouldMoveToBE = (SymbolInfoDouble(_Symbol, SYMBOL_BID) >= triggerPrice);
-         else
-            shouldMoveToBE = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) <= triggerPrice);
-      }
-
-      // ===== STANDARD TP MODE =====
-      if(inpAutoMoveToBE_Standard && inpTPMethod == TP_STANDARD && g_BETriggerPriceRuntime > 0)
-      {
-         triggerPrice = g_BETriggerPriceRuntime;
-
-         // Check if price has reached trigger
-         if(posType == POSITION_TYPE_BUY)
-            shouldMoveToBE = (SymbolInfoDouble(_Symbol, SYMBOL_BID) >= triggerPrice);
-         else
-            shouldMoveToBE = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) <= triggerPrice);
-      }
+      // Check if price has reached trigger
+      if(posType == POSITION_TYPE_BUY)
+         shouldMoveToBE = (SymbolInfoDouble(_Symbol, SYMBOL_BID) >= triggerPrice);
+      else
+         shouldMoveToBE = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) <= triggerPrice);
 
       // If trigger reached, move SL to break-even
       if(shouldMoveToBE && triggerPrice > 0)
@@ -882,114 +842,10 @@ void ManageBELineExecution()
 }
 
 //+------------------------------------------------------------------+
-//| Manage Standard TP Execution Automation                          |
-//+------------------------------------------------------------------+
-void ManageStandardTPExecution()
-{
-   // Exit if not in standard TP mode
-   if(inpTPMethod != TP_STANDARD)
-      return;
-
-   // Exit if auto-execution is disabled
-   if(!inpAutoExecuteStandardTP)
-      return;
-
-   // Loop through all positions
-   for(int i = PositionsTotal() - 1; i >= 0; i--)
-   {
-      ulong ticket = PositionGetTicket(i);
-      if(ticket <= 0) continue;
-
-      // Filter: only process positions for this symbol
-      if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
-
-      // Check if already executed
-      int size = ArraySize(g_ExecutedStandardTPPositions);
-      bool alreadyExecuted = false;
-      for(int j = 0; j < size; j++)
-      {
-         if(g_ExecutedStandardTPPositions[j] == ticket)
-         {
-            alreadyExecuted = true;
-            break;
-         }
-      }
-      if(alreadyExecuted) continue;
-
-      // Get position details
-      ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-      string comment = PositionGetString(POSITION_COMMENT);
-
-      // Determine which calculation to use based on comment
-      bool useConservative = (StringFind(comment, "_CONS") >= 0);
-      RiskCalculation calc = useConservative ? g_ConservativeCalc : g_IdealCalc;
-
-      // Check if TP price is set
-      if(calc.tpPrice <= 0)
-         continue;
-
-      double currentPrice = (posType == POSITION_TYPE_BUY) ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-
-      // Check if TP reached
-      bool tpReached = false;
-      if(posType == POSITION_TYPE_BUY)
-         tpReached = (currentPrice >= calc.tpPrice);
-      else
-         tpReached = (currentPrice <= calc.tpPrice);
-
-      if(tpReached)
-      {
-         // Close entire position
-         bool result = trade.PositionClose(ticket);
-
-         if(result)
-         {
-            Print("OK Standard TP executed: Closed entire position at TP price ", DoubleToString(calc.tpPrice, _Digits),
-                  " for Ticket #", ticket);
-
-            // Mark as executed
-            ArrayResize(g_ExecutedStandardTPPositions, size + 1);
-            g_ExecutedStandardTPPositions[size] = ticket;
-
-            // Notifications
-            if(inpStandardTPExecuteEnableAlert)
-               Alert("Standard TP executed (100%) for ", _Symbol, " Ticket #", ticket);
-
-            if(inpStandardTPExecuteEnableSound)
-               PlaySound(inpStandardTPExecuteSoundFile);
-
-            if(inpStandardTPExecuteEnablePush)
-               SendNotification("Standard TP executed for " + _Symbol + " Ticket: " + IntegerToString(ticket));
-
-            if(inpStandardTPExecuteEnableEmail)
-            {
-               string subject = "MT5 Alert: Standard TP Executed - " + _Symbol;
-               string body = "Standard Take Profit executed!\n\n" +
-                            "Symbol: " + _Symbol + "\n" +
-                            "Ticket: " + IntegerToString(ticket) + "\n" +
-                            "TP Price: " + DoubleToString(calc.tpPrice, _Digits) + "\n" +
-                            "Closed: 100% (Full Position)\n" +
-                            "Time: " + TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS);
-               SendMail(subject, body);
-            }
-         }
-         else
-         {
-            Print("✗ Failed to close position for Ticket #", ticket, " - Error: ", trade.ResultRetcodeDescription());
-         }
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
 //| Manage Partial TP Execution Automation                           |
 //+------------------------------------------------------------------+
 void ManagePartialTPExecution()
 {
-   // Exit if not in partial exits mode
-   if(inpTPMethod != TP_PARTIAL_EXITS)
-      return;
-
    // Exit if all auto-execution features are disabled
    if(!inpAutoExecuteTP1 && !inpAutoExecuteTP2 && !inpAutoExecuteTP3)
       return;
@@ -1151,7 +1007,6 @@ void OnTick()
    ManageBreakEven();
    ManageStopLossExecution();
    ManageBELineExecution();
-   ManageStandardTPExecution();
    ManagePartialTPExecution();
 }
 
@@ -1215,7 +1070,7 @@ void OnTrade()
       datetime dealTime = (datetime)HistoryDealGetInteger(dealTicket, DEAL_TIME);
 
       // Note: Email alerts for TP/SL hits are now handled by auto-execution functions
-      // (ManageStopLossExecution, ManageStandardTPExecution, ManagePartialTPExecution)
+      // (ManageStopLossExecution, ManagePartialTPExecution)
    }
 }
 
@@ -1321,54 +1176,6 @@ void OnChartEvent(const int id,
             SaveSettingsToFile();
 
          Print("OK SL dragged to: ", DoubleToString(calc.slPrice, g_Digits), " (", DoubleToString(slPips, 1), " pips)");
-      }
-      // TP Line dragged
-      else if(sparam == g_TPLineName && inpTPMode == TP_DYNAMIC)
-      {
-         double newPrice = ObjectGetDouble(0, g_TPLineName, OBJPROP_PRICE, 0);
-
-         // Normalize to tick size
-         double tickSize = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
-         newPrice = NormalizeDouble(MathRound(newPrice / tickSize) * tickSize, g_Digits);
-
-         // Update the line to normalized price
-         datetime currentTime = TimeCurrent();
-         datetime futureTime = currentTime + PeriodSeconds(PERIOD_CURRENT) * 100;
-         ObjectMove(0, g_TPLineName, 0, currentTime, newPrice);
-         ObjectMove(0, g_TPLineName, 1, futureTime, newPrice);
-
-         // Save to global variable for file sync
-         g_DynamicTPPrice = newPrice;
-
-         // Recalculate risk with new TP
-         CalculateRisk();
-         UpdatePanel();
-
-         // IMMEDIATE label update (fixes 3-second lag)
-         RiskCalculation calc = (inpDisplayMode == DISPLAY_CONSERVATIVE) ? g_ConservativeCalc : g_IdealCalc;
-         double currentPrice = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-         bool isDynamicSL = (inpSLMode == SL_DYNAMIC);
-         double slPips = (isDynamicSL) ? MathAbs(currentPrice - calc.slPrice) / g_PipValue : calc.slPips;
-         double tpPips = MathAbs(calc.tpPrice - currentPrice) / g_PipValue;
-         double rrRatio = (tpPips > 0 && slPips > 0) ? (tpPips / slPips) : 0;
-
-         string tpLabel = "TP: " + DoubleToString(tpPips, 1) + " pips";
-         if(inpMetricDisplay == METRIC_RR)
-         {
-            if(rrRatio > 0) tpLabel += " | RR: " + DoubleToString(rrRatio, 2);
-         }
-         else // METRIC_PIP_DISTANCE
-         {
-            tpLabel += " | Pip Dist.: " + DoubleToString(calc.tpPipDistance, 1);
-         }
-         tpLabel += " | Net: $" + DoubleToString(calc.netTP, 2);
-         UpdateLabelPosition(g_TPLabelName, calc.tpPrice, tpLabel);
-
-         // Auto-save global variables
-         if(inpExportDirectory != "")
-            SaveSettingsToFile();
-
-         Print("OK TP dragged to: ", DoubleToString(calc.tpPrice, g_Digits), " (", DoubleToString(tpPips, 1), " pips, RR: ", DoubleToString(rrRatio, 2), ")");
       }
       // Partial TP1 Line dragged
       else if(sparam == g_PartialTP1LineName)
@@ -1509,33 +1316,6 @@ void OnChartEvent(const int id,
 
          Print("OK TP3 dragged to: ", DoubleToString(calc.partialTP3Price, g_Digits), " (", DoubleToString(calc.partialPips3, 1), " pips, RR: ", DoubleToString(rr3, 2), ")");
       }
-      // BE Trigger Line dragged
-      else if(sparam == g_BETriggerLineName && inpAutoMoveToBE_Standard)
-      {
-         double newPrice = ObjectGetDouble(0, g_BETriggerLineName, OBJPROP_PRICE, 0);
-
-         // Normalize to tick size
-         double tickSize = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
-         newPrice = NormalizeDouble(MathRound(newPrice / tickSize) * tickSize, g_Digits);
-
-         // Update the line to normalized price
-         datetime currentTime = TimeCurrent();
-         datetime futureTime = currentTime + PeriodSeconds(PERIOD_CURRENT) * 100;
-         ObjectMove(0, g_BETriggerLineName, 0, currentTime, newPrice);
-         ObjectMove(0, g_BETriggerLineName, 1, futureTime, newPrice);
-
-         // Update runtime variable
-         g_BETriggerPriceRuntime = newPrice;
-
-         // Update line label
-         ObjectSetString(0, g_BETriggerLineName, OBJPROP_TEXT, "BE Trigger: " + DoubleToString(newPrice, _Digits));
-
-         // Auto-save global variables
-         if(inpExportDirectory != "")
-            SaveSettingsToFile();
-
-         Print("OK BE Trigger line dragged to: ", DoubleToString(newPrice, g_Digits));
-      }
    }
 }
 
@@ -1601,34 +1381,6 @@ void CalculateRisk()
    // Break-even calculation
    double idealTotalFees = g_IdealCalc.commission + (g_IdealCalc.lotSize * inpExitSlippage * pipValuePerLot);
    g_IdealCalc.breakEvenPips = idealTotalFees / (g_IdealCalc.lotSize * pipValuePerLot);
-   
-   // Take Profit calculation
-   double idealCommissionPips = g_IdealCalc.commission / (g_IdealCalc.lotSize * pipValuePerLot);
-   double idealTotalRiskPips = slPips + inpExitSlippage + idealCommissionPips;
-   
-   if(inpTPMode == TP_RR_MULTIPLE)
-   {
-      g_IdealCalc.tpPips = idealTotalRiskPips * inpRRMultiple;
-      g_IdealCalc.tpPrice = isLongTrade ? (currentPrice + (g_IdealCalc.tpPips * g_PipValue)) : (currentPrice - (g_IdealCalc.tpPips * g_PipValue));
-   }
-   else // TP_DYNAMIC
-   {
-      // Use g_DynamicTPPrice if set, otherwise use RR multiple as default
-      if(g_DynamicTPPrice > 0)
-      {
-         g_IdealCalc.tpPrice = g_DynamicTPPrice;
-         g_IdealCalc.tpPips = MathAbs(g_IdealCalc.tpPrice - currentPrice) / g_PipValue;
-      }
-      else
-      {
-         // Default: use RR multiple (line will be created and user can drag it)
-         g_IdealCalc.tpPips = idealTotalRiskPips * inpRRMultiple;
-         g_IdealCalc.tpPrice = isLongTrade ? (currentPrice + (g_IdealCalc.tpPips * g_PipValue)) : (currentPrice - (g_IdealCalc.tpPips * g_PipValue));
-      }
-   }
-   g_IdealCalc.grossTP = g_IdealCalc.lotSize * g_IdealCalc.tpPips * pipValuePerLot;
-   double idealExitSlippageCost = g_IdealCalc.lotSize * inpExitSlippage * pipValuePerLot;
-   g_IdealCalc.netTP = g_IdealCalc.grossTP - idealExitSlippageCost - g_IdealCalc.commission;
 
    // Pip distance calculation
    g_IdealCalc.dollarPerPip = g_IdealCalc.lotSize * pipValuePerLot;
@@ -1659,34 +1411,6 @@ void CalculateRisk()
    // Break-even calculation
    double conservativeTotalFees = g_ConservativeCalc.commission + (g_ConservativeCalc.lotSize * inpExitSlippage * pipValuePerLot);
    g_ConservativeCalc.breakEvenPips = conservativeTotalFees / (g_ConservativeCalc.lotSize * pipValuePerLot);
-   
-   // Take Profit calculation
-   double conservativeCommissionPips = g_ConservativeCalc.commission / (g_ConservativeCalc.lotSize * pipValuePerLot);
-   double conservativeTotalRiskPips = effectiveSL + inpExitSlippage + conservativeCommissionPips;
-   
-   if(inpTPMode == TP_RR_MULTIPLE)
-   {
-      g_ConservativeCalc.tpPips = conservativeTotalRiskPips * inpRRMultiple;
-      g_ConservativeCalc.tpPrice = isLongTrade ? (g_ConservativeCalc.entryPrice + (g_ConservativeCalc.tpPips * g_PipValue)) : (g_ConservativeCalc.entryPrice - (g_ConservativeCalc.tpPips * g_PipValue));
-   }
-   else // TP_DYNAMIC
-   {
-      // Use g_DynamicTPPrice if set, otherwise use RR multiple as default
-      if(g_DynamicTPPrice > 0)
-      {
-         g_ConservativeCalc.tpPrice = g_DynamicTPPrice;
-         g_ConservativeCalc.tpPips = MathAbs(g_ConservativeCalc.tpPrice - g_ConservativeCalc.entryPrice) / g_PipValue;
-      }
-      else
-      {
-         // Default: use RR multiple (line will be created and user can drag it)
-         g_ConservativeCalc.tpPips = conservativeTotalRiskPips * inpRRMultiple;
-         g_ConservativeCalc.tpPrice = isLongTrade ? (g_ConservativeCalc.entryPrice + (g_ConservativeCalc.tpPips * g_PipValue)) : (g_ConservativeCalc.entryPrice - (g_ConservativeCalc.tpPips * g_PipValue));
-      }
-   }
-   g_ConservativeCalc.grossTP = g_ConservativeCalc.lotSize * g_ConservativeCalc.tpPips * pipValuePerLot;
-   double conservativeExitSlippageCost = g_ConservativeCalc.lotSize * inpExitSlippage * pipValuePerLot;
-   g_ConservativeCalc.netTP = g_ConservativeCalc.grossTP - conservativeExitSlippageCost - g_ConservativeCalc.commission;
 
    // Pip distance calculation
    g_ConservativeCalc.dollarPerPip = g_ConservativeCalc.lotSize * pipValuePerLot;
@@ -1700,11 +1424,8 @@ void CalculateRisk()
    g_ConservativeCalc.returnOnMargin = g_ConservativeCalc.marginRequired > 0 ? (g_ConservativeCalc.netTP / g_ConservativeCalc.marginRequired) * 100.0 : 0;
    
    //--- PARTIAL EXITS CALCULATION
-   if(inpTPMethod == TP_PARTIAL_EXITS)
-   {
-      CalculatePartialExits(g_IdealCalc, pipValuePerLot, isLongTrade);
-      CalculatePartialExits(g_ConservativeCalc, pipValuePerLot, isLongTrade);
-   }
+   CalculatePartialExits(g_IdealCalc, pipValuePerLot, isLongTrade);
+   CalculatePartialExits(g_ConservativeCalc, pipValuePerLot, isLongTrade);
 }
 
 //+------------------------------------------------------------------+
@@ -1716,17 +1437,14 @@ int GetPanelHeight()
    if(inpPanelHeight > 0)
       return inpPanelHeight;
 
-   // Otherwise, auto-calculate based on TP method and row height
+   // Otherwise, auto-calculate based on number of levels and row height
    int baseRows = 24;
    int additionalRows = 0;
 
-   if(inpTPMethod == TP_PARTIAL_EXITS)
-   {
-      if(inpNumberOfLevels == 3)
-         additionalRows = 8;  // Partial Exits with 3 levels
-      else
-         additionalRows = 6;  // Partial Exits with 2 levels
-   }
+   if(inpNumberOfLevels == 3)
+      additionalRows = 8;  // Partial Exits with 3 levels
+   else
+      additionalRows = 6;  // Partial Exits with 2 levels
 
    return (baseRows + additionalRows) * inpRowHeight + (inpPanelPadding * 2);
 }
@@ -1833,22 +1551,12 @@ void UpdatePanel()
    // Take Profit Display
    if(inpShowTP)
    {
-      if(inpTPMethod == TP_PARTIAL_EXITS)
-      {
-         // Show partial exits summary
-         double exitPercent3 = (inpNumberOfLevels == 3) ? (100 - inpExitPercent1 - inpExitPercent2) : 0;
+      // Show partial exits summary
+      double exitPercent3 = (inpNumberOfLevels == 3) ? (100 - inpExitPercent1 - inpExitPercent2) : 0;
 
-         CreateLabel("TPLabel", "Partial Exits:", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
-         CreateLabel("TPValue", IntegerToString(inpNumberOfLevels) + " Levels", x + 180, y + (currentRow * rowHeight), clrGreen, inpFontSizeNormal, "Arial");
-         currentRow++;
-      }
-      else
-      {
-         string tpModeText = (inpTPMode == TP_RR_MULTIPLE) ? "Take Profit (RR: " + DoubleToString(inpRRMultiple, 1) + "):" : "Take Profit (Dynamic):";
-         CreateLabel("TPLabel", tpModeText, x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
-         CreateLabel("TPValue", DoubleToString(display.tpPips, 1) + " pips", x + 180, y + (currentRow * rowHeight), clrGreen, inpFontSizeNormal, "Arial");
-         currentRow++;
-      }
+      CreateLabel("TPLabel", "Partial Exits:", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
+      CreateLabel("TPValue", IntegerToString(inpNumberOfLevels) + " Levels", x + 180, y + (currentRow * rowHeight), clrGreen, inpFontSizeNormal, "Arial");
+      currentRow++;
    }
    
    CreateLabel("BELabel", "Break-even:", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
@@ -1878,48 +1586,39 @@ void UpdatePanel()
    
    if(inpShowTP)
    {
-      if(inpTPMethod == TP_PARTIAL_EXITS)
+      // Show partial exits details
+      double exitPercent3 = (inpNumberOfLevels == 3) ? (100 - inpExitPercent1 - inpExitPercent2) : 0;
+
+      CreateLabel("PartialTitle", "Partial Exits Breakdown:", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial Bold");
+      currentRow++;
+
+      // Level 1 - condensed
+      CreateLabel("Level1Label", "L1: " + DoubleToString(inpExitPercent1, 0) + "% (" + DoubleToString(display.partialLots1, 2) + " lots)", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
+      currentRow++;
+      CreateLabel("Level1Pips", "  +" + DoubleToString(display.partialPips1, 1) + " pips", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
+      CreateLabel("Level1Net", "$" + DoubleToString(display.partialNetPnL1, 2), x + 180, y + (currentRow * rowHeight), clrGreen, inpFontSizeNormal, "Arial");
+      currentRow++;
+
+      // Level 2 - condensed
+      CreateLabel("Level2Label", "L2: " + DoubleToString(inpExitPercent2, 0) + "% (" + DoubleToString(display.partialLots2, 2) + " lots)", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
+      currentRow++;
+      CreateLabel("Level2Pips", "  +" + DoubleToString(display.partialPips2, 1) + " pips", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
+      CreateLabel("Level2Net", "$" + DoubleToString(display.partialNetPnL2, 2), x + 180, y + (currentRow * rowHeight), clrGreen, inpFontSizeNormal, "Arial");
+      currentRow++;
+
+      // Level 3 (if enabled) - condensed
+      if(inpNumberOfLevels == 3)
       {
-         // Show partial exits details
-         double exitPercent3 = (inpNumberOfLevels == 3) ? (100 - inpExitPercent1 - inpExitPercent2) : 0;
-         
-         CreateLabel("PartialTitle", "Partial Exits Breakdown:", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial Bold");
+         CreateLabel("Level3Label", "L3: " + DoubleToString(exitPercent3, 0) + "% (" + DoubleToString(display.partialLots3, 2) + " lots)", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
          currentRow++;
-         
-         // Level 1 - condensed
-         CreateLabel("Level1Label", "L1: " + DoubleToString(inpExitPercent1, 0) + "% (" + DoubleToString(display.partialLots1, 2) + " lots)", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
-         currentRow++;
-         CreateLabel("Level1Pips", "  +" + DoubleToString(display.partialPips1, 1) + " pips", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
-         CreateLabel("Level1Net", "$" + DoubleToString(display.partialNetPnL1, 2), x + 180, y + (currentRow * rowHeight), clrGreen, inpFontSizeNormal, "Arial");
-         currentRow++;
-         
-         // Level 2 - condensed
-         CreateLabel("Level2Label", "L2: " + DoubleToString(inpExitPercent2, 0) + "% (" + DoubleToString(display.partialLots2, 2) + " lots)", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
-         currentRow++;
-         CreateLabel("Level2Pips", "  +" + DoubleToString(display.partialPips2, 1) + " pips", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
-         CreateLabel("Level2Net", "$" + DoubleToString(display.partialNetPnL2, 2), x + 180, y + (currentRow * rowHeight), clrGreen, inpFontSizeNormal, "Arial");
-         currentRow++;
-         
-         // Level 3 (if enabled) - condensed
-         if(inpNumberOfLevels == 3)
-         {
-            CreateLabel("Level3Label", "L3: " + DoubleToString(exitPercent3, 0) + "% (" + DoubleToString(display.partialLots3, 2) + " lots)", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
-            currentRow++;
-            CreateLabel("Level3Pips", "  +" + DoubleToString(display.partialPips3, 1) + " pips", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
-            CreateLabel("Level3Net", "$" + DoubleToString(display.partialNetPnL3, 2), x + 180, y + (currentRow * rowHeight), clrGreen, inpFontSizeNormal, "Arial");
-            currentRow++;
-         }
-         
-         CreateLabel("PartialTotalLabel", "Total Net P&L:", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeBold, "Arial Bold");
-         CreateLabel("PartialTotalValue", "$" + DoubleToString(display.partialTotalNetPnL, 2), x + 180, y + (currentRow * rowHeight), clrGreen, inpFontSizeBold, "Arial Bold");
+         CreateLabel("Level3Pips", "  +" + DoubleToString(display.partialPips3, 1) + " pips", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
+         CreateLabel("Level3Net", "$" + DoubleToString(display.partialNetPnL3, 2), x + 180, y + (currentRow * rowHeight), clrGreen, inpFontSizeNormal, "Arial");
          currentRow++;
       }
-      else
-      {
-         CreateLabel("NetTPLabel", "Net Take Profit:", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
-         CreateLabel("NetTPValue", "$" + DoubleToString(display.netTP, 2), x + 180, y + (currentRow * rowHeight), clrGreen, inpFontSizeNormal, "Arial");
-         currentRow++;
-      }
+
+      CreateLabel("PartialTotalLabel", "Total Net P&L:", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeBold, "Arial Bold");
+      CreateLabel("PartialTotalValue", "$" + DoubleToString(display.partialTotalNetPnL, 2), x + 180, y + (currentRow * rowHeight), clrGreen, inpFontSizeBold, "Arial Bold");
+      currentRow++;
    }
    
    currentRow++;
@@ -2255,27 +1954,8 @@ void ExecuteBuyOrder()
    // Determine TP based on inpPlaceSLTP setting
    if(inpPlaceSLTP)
    {
-      if(inpTPMethod == TP_STANDARD)
-      {
-         // Standard TP: Place order with SL and TP
-         tp = inpShowTP ? NormalizeDouble(calc.tpPrice, g_Digits) : 0;
-         result = trade.Buy(lots, _Symbol, ask, sl, tp, commentWithBE);
-
-         if(result)
-         {
-            Print("BUY Order Executed: Lot Size = ", lots, ", SL = ", sl, ", TP = ", tp);
-            Comment("OK BUY Order Placed Successfully!\nLot Size: ", lots, "\nSL: ", sl, "\nTP: ", tp);
-         }
-         else
-         {
-            Print("BUY Order Failed: ", trade.ResultRetcodeDescription());
-            Comment("✗ BUY Order Failed: ", trade.ResultRetcodeDescription());
-         }
-      }
-      else // TP_PARTIAL_EXITS
-      {
-         // Partial Exits: Place main order with SL only, then place limit orders for each level
-         result = trade.Buy(lots, _Symbol, ask, sl, 0, commentWithBE);
+      // Partial Exits: Place main order with SL only, then place limit orders for each level
+      result = trade.Buy(lots, _Symbol, ask, sl, 0, commentWithBE);
 
          if(result)
          {
@@ -2402,30 +2082,11 @@ void ExecuteSellOrder()
    // Determine TP based on inpPlaceSLTP setting
    if(inpPlaceSLTP)
    {
-      if(inpTPMethod == TP_STANDARD)
-      {
-         // Standard TP: Place order with SL and TP
-         tp = inpShowTP ? NormalizeDouble(calc.tpPrice, g_Digits) : 0;
-         result = trade.Sell(lots, _Symbol, bid, sl, tp, commentWithBE);
+      // Partial Exits: Place main order with SL only, then place limit orders for each level
+      result = trade.Sell(lots, _Symbol, bid, sl, 0, commentWithBE);
 
-         if(result)
-         {
-            Print("SELL Order Executed: Lot Size = ", lots, ", SL = ", sl, ", TP = ", tp);
-            Comment("OK SELL Order Placed Successfully!\nLot Size: ", lots, "\nSL: ", sl, "\nTP: ", tp);
-         }
-         else
-         {
-            Print("SELL Order Failed: ", trade.ResultRetcodeDescription());
-            Comment("✗ SELL Order Failed: ", trade.ResultRetcodeDescription());
-         }
-      }
-      else // TP_PARTIAL_EXITS
+      if(result)
       {
-         // Partial Exits: Place main order with SL only, then place limit orders for each level
-         result = trade.Sell(lots, _Symbol, bid, sl, 0, commentWithBE);
-
-         if(result)
-         {
             Print("SELL Order Executed: Lot Size = ", lots, ", SL = ", sl);
 
             // Now place BUY_LIMIT orders for partial exits
@@ -2777,10 +2438,8 @@ void UpdateLines()
    // Take Profit Line(s)
    if(inpShowTP)
    {
-      if(inpTPMethod == TP_PARTIAL_EXITS)
-      {
-         // Draw partial exit lines (always draggable)
-         double exitPercent3 = (inpNumberOfLevels == 3) ? (100 - inpExitPercent1 - inpExitPercent2) : 0;
+      // Draw partial exit lines (always draggable)
+      double exitPercent3 = (inpNumberOfLevels == 3) ? (100 - inpExitPercent1 - inpExitPercent2) : 0;
 
          // Level 1
          if(ObjectFind(0, g_PartialTP1LineName) < 0)
@@ -2916,74 +2575,12 @@ void UpdateLines()
             if(ObjectFind(0, g_PartialTP3LabelName) >= 0)
                ObjectDelete(0, g_PartialTP3LabelName);
          }
-         
-         // Delete standard TP line and label if they exist
+
+         // Delete standard TP line and label if they exist (cleanup from old version)
          if(ObjectFind(0, g_TPLineName) >= 0)
             ObjectDelete(0, g_TPLineName);
          if(ObjectFind(0, g_TPLabelName) >= 0)
             ObjectDelete(0, g_TPLabelName);
-      }
-      else
-      {
-         // Standard TP line
-         bool isDynamicTP = (inpTPMode == TP_DYNAMIC);
-
-         if(ObjectFind(0, g_TPLineName) < 0)
-         {
-            ObjectCreate(0, g_TPLineName, OBJ_TREND, 0, currentTime, calc.tpPrice, futureTime, calc.tpPrice);
-            ObjectSetInteger(0, g_TPLineName, OBJPROP_COLOR, inpTPLineColor);
-            ObjectSetInteger(0, g_TPLineName, OBJPROP_WIDTH, 2);
-            ObjectSetInteger(0, g_TPLineName, OBJPROP_STYLE, STYLE_SOLID);
-            ObjectSetInteger(0, g_TPLineName, OBJPROP_RAY_RIGHT, true);
-            ObjectSetString(0, g_TPLineName, OBJPROP_TEXT, "TP: " + DoubleToString(calc.tpPips, 1) + " pips");
-         }
-         else
-         {
-            ObjectMove(0, g_TPLineName, 0, currentTime, calc.tpPrice);
-            ObjectMove(0, g_TPLineName, 1, futureTime, calc.tpPrice);
-         }
-
-         // Make line draggable in Dynamic mode
-         ObjectSetInteger(0, g_TPLineName, OBJPROP_SELECTABLE, isDynamicTP);
-
-         // Add text label showing pips, RR, and Net profit
-         double currentPrice = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-         double slPips = (isDynamicSL) ? MathAbs(currentPrice - calc.slPrice) / g_PipValue : calc.slPips;
-         double tpPips = MathAbs(calc.tpPrice - currentPrice) / g_PipValue;
-         double rrRatio = (tpPips > 0 && slPips > 0) ? (tpPips / slPips) : 0;
-
-         string tpLabel = "TP: " + DoubleToString(tpPips, 1) + " pips";
-         if(inpMetricDisplay == METRIC_RR)
-         {
-            if(rrRatio > 0) tpLabel += " | RR: " + DoubleToString(rrRatio, 2);
-         }
-         else // METRIC_PIP_DISTANCE
-         {
-            tpLabel += " | Pip Dist.: " + DoubleToString(calc.tpPipDistance, 1);
-         }
-         tpLabel += " | Net: $" + DoubleToString(calc.netTP, 2);
-
-         if(ObjectFind(0, g_TPLabelName) < 0)
-         {
-            ObjectCreate(0, g_TPLabelName, OBJ_TEXT, 0, TimeCurrent(), calc.tpPrice);
-            ObjectSetInteger(0, g_TPLabelName, OBJPROP_COLOR, inpTPLineColor);
-            ObjectSetInteger(0, g_TPLabelName, OBJPROP_FONTSIZE, 8);
-         }
-         UpdateLabelPosition(g_TPLabelName, calc.tpPrice, tpLabel);
-
-         // Delete partial exit lines and labels if they exist
-         if(ObjectFind(0, g_PartialTP1LineName) >= 0)
-            ObjectDelete(0, g_PartialTP1LineName);
-         if(ObjectFind(0, g_PartialTP1LabelName) >= 0)
-            ObjectDelete(0, g_PartialTP1LabelName);
-         if(ObjectFind(0, g_PartialTP2LineName) >= 0)
-            ObjectDelete(0, g_PartialTP2LineName);
-         if(ObjectFind(0, g_PartialTP2LabelName) >= 0)
-            ObjectDelete(0, g_PartialTP2LabelName);
-         if(ObjectFind(0, g_PartialTP3LineName) >= 0)
-            ObjectDelete(0, g_PartialTP3LineName);
-         if(ObjectFind(0, g_PartialTP3LabelName) >= 0)
-            ObjectDelete(0, g_PartialTP3LabelName);
       }
    }
    
@@ -3007,44 +2604,6 @@ void UpdateLines()
          ObjectMove(0, g_EntryLineName, 1, futureTime, calc.entryPrice);
       }
    }
-
-   // BE Trigger Price Line (Auto Move to BE - Standard Mode)
-   if(inpAutoMoveToBE_Standard && g_BETriggerPriceRuntime > 0)
-   {
-      if(ObjectFind(0, g_BETriggerLineName) < 0)
-      {
-         ObjectCreate(0, g_BETriggerLineName, OBJ_TREND, 0, currentTime, g_BETriggerPriceRuntime, futureTime, g_BETriggerPriceRuntime);
-         ObjectSetInteger(0, g_BETriggerLineName, OBJPROP_COLOR, clrGold);
-         ObjectSetInteger(0, g_BETriggerLineName, OBJPROP_WIDTH, 2);
-         ObjectSetInteger(0, g_BETriggerLineName, OBJPROP_STYLE, STYLE_DASHDOT);
-         ObjectSetInteger(0, g_BETriggerLineName, OBJPROP_RAY_RIGHT, true);
-         ObjectSetInteger(0, g_BETriggerLineName, OBJPROP_SELECTABLE, true);
-         ObjectSetString(0, g_BETriggerLineName, OBJPROP_TEXT, "BE Trigger: " + DoubleToString(g_BETriggerPriceRuntime, _Digits));
-      }
-      else
-      {
-         ObjectMove(0, g_BETriggerLineName, 0, currentTime, g_BETriggerPriceRuntime);
-         ObjectMove(0, g_BETriggerLineName, 1, futureTime, g_BETriggerPriceRuntime);
-         ObjectSetString(0, g_BETriggerLineName, OBJPROP_TEXT, "BE Trigger: " + DoubleToString(g_BETriggerPriceRuntime, _Digits));
-      }
-
-      // Draw BE Trigger Label
-      if(ObjectFind(0, g_BETriggerLabelName) < 0)
-      {
-         ObjectCreate(0, g_BETriggerLabelName, OBJ_TEXT, 0, currentTime, g_BETriggerPriceRuntime);
-         ObjectSetInteger(0, g_BETriggerLabelName, OBJPROP_COLOR, clrGold);
-         ObjectSetInteger(0, g_BETriggerLabelName, OBJPROP_FONTSIZE, 8);
-      }
-      UpdateLabelPosition(g_BETriggerLabelName, g_BETriggerPriceRuntime, "BE Trigger");
-   }
-   else
-   {
-      // Delete BE Trigger line if it exists but shouldn't be shown
-      if(ObjectFind(0, g_BETriggerLineName) >= 0)
-         ObjectDelete(0, g_BETriggerLineName);
-      if(ObjectFind(0, g_BETriggerLabelName) >= 0)
-         ObjectDelete(0, g_BETriggerLabelName);
-   }
 }
 
 //+------------------------------------------------------------------+
@@ -3056,7 +2615,6 @@ void DeleteLines()
    ObjectDelete(0, g_TPLineName);
    ObjectDelete(0, g_EntryLineName);
    ObjectDelete(0, g_BELineName);
-   ObjectDelete(0, g_BETriggerLineName);
    ObjectDelete(0, g_PartialTP1LineName);
    ObjectDelete(0, g_PartialTP2LineName);
    ObjectDelete(0, g_PartialTP3LineName);
@@ -3066,7 +2624,6 @@ void DeleteLines()
    ObjectDelete(0, g_PartialTP1LabelName);
    ObjectDelete(0, g_PartialTP2LabelName);
    ObjectDelete(0, g_PartialTP3LabelName);
-   ObjectDelete(0, g_BETriggerLabelName);
 }
 
 //+------------------------------------------------------------------+
@@ -3234,7 +2791,6 @@ void SaveToSetFile()
    // Trade Management
    FileWriteString(fileHandle, "inpTradeManagementMode=" + (inpTradeManagementMode ? "1" : "0") + "||Y\n");
    FileWriteString(fileHandle, "inpPlaceSLTP=" + (inpPlaceSLTP ? "1" : "0") + "||Y\n");
-   FileWriteString(fileHandle, "inpAutoMoveToBE_Standard=" + (inpAutoMoveToBE_Standard ? "1" : "0") + "||Y\n");
    FileWriteString(fileHandle, "inpBEOffsetPips=" + DoubleToString(inpBEOffsetPips, 2) + "||Y\n");
    FileWriteString(fileHandle, "inpAutoMoveToBE_Partial=" + (inpAutoMoveToBE_Partial ? "1" : "0") + "||Y\n");
    FileWriteString(fileHandle, "inpBETriggerLevel=" + IntegerToString(inpBETriggerLevel) + "||Y\n");
@@ -3252,9 +2808,6 @@ void SaveToSetFile()
 
    // Take Profit
    FileWriteString(fileHandle, "inpShowTP=" + (inpShowTP ? "1" : "0") + "||Y\n");
-   FileWriteString(fileHandle, "inpTPMethod=" + IntegerToString(inpTPMethod) + "||Y\n");
-   FileWriteString(fileHandle, "inpTPMode=" + IntegerToString(inpTPMode) + "||Y\n");
-   FileWriteString(fileHandle, "inpRRMultiple=" + DoubleToString(inpRRMultiple, 2) + "||Y\n");
 
    // Partial Exits
    FileWriteString(fileHandle, "inpNumberOfLevels=" + IntegerToString(inpNumberOfLevels) + "||Y\n");
