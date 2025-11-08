@@ -2085,77 +2085,76 @@ void ExecuteBuyOrder()
       // Partial Exits: Place main order with SL only, then place limit orders for each level
       result = trade.Buy(lots, _Symbol, ask, sl, 0, commentWithBE);
 
-         if(result)
-         {
-            Print("BUY Order Executed: Lot Size = ", lots, ", SL = ", sl);
+      if(result)
+      {
+         Print("BUY Order Executed: Lot Size = ", lots, ", SL = ", sl);
 
-            // Now place SELL_LIMIT orders for partial exits
-            bool allLimitsPlaced = true;
+         // Now place SELL_LIMIT orders for partial exits
+         bool allLimitsPlaced = true;
 
-            // TP1
-            double tp1Lots = NormalizeDouble(calc.partialLots1, 2);
-            if(tp1Lots < minLot) tp1Lots = minLot;
-            if(tp1Lots > maxLot) tp1Lots = maxLot;
-            tp1Lots = MathFloor(tp1Lots / lotStep) * lotStep;
+         // TP1
+         double tp1Lots = NormalizeDouble(calc.partialLots1, 2);
+         if(tp1Lots < minLot) tp1Lots = minLot;
+         if(tp1Lots > maxLot) tp1Lots = maxLot;
+         tp1Lots = MathFloor(tp1Lots / lotStep) * lotStep;
 
-            double tp1Price = NormalizeDouble(calc.partialTP1Price, g_Digits);
-            bool tp1Result = trade.OrderOpen(_Symbol, ORDER_TYPE_SELL_LIMIT, tp1Lots, 0, tp1Price, 0, 0, ORDER_TIME_GTC, 0, "TP1 @ " + DoubleToString(calc.partialPips1, 1) + " pips");
+         double tp1Price = NormalizeDouble(calc.partialTP1Price, g_Digits);
+         bool tp1Result = trade.OrderOpen(_Symbol, ORDER_TYPE_SELL_LIMIT, tp1Lots, 0, tp1Price, 0, 0, ORDER_TIME_GTC, 0, "TP1 @ " + DoubleToString(calc.partialPips1, 1) + " pips");
 
-            if(tp1Result)
-               Print("TP1 SELL_LIMIT placed: ", tp1Lots, " lots @ ", tp1Price);
-            else
-            {
-               Print("TP1 SELL_LIMIT failed: ", trade.ResultRetcodeDescription());
-               allLimitsPlaced = false;
-            }
-
-            // TP2
-            double tp2Lots = NormalizeDouble(calc.partialLots2, 2);
-            if(tp2Lots < minLot) tp2Lots = minLot;
-            if(tp2Lots > maxLot) tp2Lots = maxLot;
-            tp2Lots = MathFloor(tp2Lots / lotStep) * lotStep;
-
-            double tp2Price = NormalizeDouble(calc.partialTP2Price, g_Digits);
-            bool tp2Result = trade.OrderOpen(_Symbol, ORDER_TYPE_SELL_LIMIT, tp2Lots, 0, tp2Price, 0, 0, ORDER_TIME_GTC, 0, "TP2 @ " + DoubleToString(calc.partialPips2, 1) + " pips");
-
-            if(tp2Result)
-               Print("TP2 SELL_LIMIT placed: ", tp2Lots, " lots @ ", tp2Price);
-            else
-            {
-               Print("TP2 SELL_LIMIT failed: ", trade.ResultRetcodeDescription());
-               allLimitsPlaced = false;
-            }
-
-            // TP3 (if enabled)
-            if(inpNumberOfLevels == 3)
-            {
-               double tp3Lots = NormalizeDouble(calc.partialLots3, 2);
-               if(tp3Lots < minLot) tp3Lots = minLot;
-               if(tp3Lots > maxLot) tp3Lots = maxLot;
-               tp3Lots = MathFloor(tp3Lots / lotStep) * lotStep;
-
-               double tp3Price = NormalizeDouble(calc.partialTP3Price, g_Digits);
-               bool tp3Result = trade.OrderOpen(_Symbol, ORDER_TYPE_SELL_LIMIT, tp3Lots, 0, tp3Price, 0, 0, ORDER_TIME_GTC, 0, "TP3 @ " + DoubleToString(calc.partialPips3, 1) + " pips");
-
-               if(tp3Result)
-                  Print("TP3 SELL_LIMIT placed: ", tp3Lots, " lots @ ", tp3Price);
-               else
-               {
-                  Print("TP3 SELL_LIMIT failed: ", trade.ResultRetcodeDescription());
-                  allLimitsPlaced = false;
-               }
-            }
-
-            if(allLimitsPlaced)
-               Comment("OK BUY Order & Partial Exit Limits Placed Successfully!\nLot Size: ", lots, "\nSL: ", sl);
-            else
-               Comment("OK BUY Order Placed, but some Partial Exit Limits Failed!\nCheck Journal for details.");
-         }
+         if(tp1Result)
+            Print("TP1 SELL_LIMIT placed: ", tp1Lots, " lots @ ", tp1Price);
          else
          {
-            Print("BUY Order Failed: ", trade.ResultRetcodeDescription());
-            Comment("✗ BUY Order Failed: ", trade.ResultRetcodeDescription());
+            Print("TP1 SELL_LIMIT failed: ", trade.ResultRetcodeDescription());
+            allLimitsPlaced = false;
          }
+
+         // TP2
+         double tp2Lots = NormalizeDouble(calc.partialLots2, 2);
+         if(tp2Lots < minLot) tp2Lots = minLot;
+         if(tp2Lots > maxLot) tp2Lots = maxLot;
+         tp2Lots = MathFloor(tp2Lots / lotStep) * lotStep;
+
+         double tp2Price = NormalizeDouble(calc.partialTP2Price, g_Digits);
+         bool tp2Result = trade.OrderOpen(_Symbol, ORDER_TYPE_SELL_LIMIT, tp2Lots, 0, tp2Price, 0, 0, ORDER_TIME_GTC, 0, "TP2 @ " + DoubleToString(calc.partialPips2, 1) + " pips");
+
+         if(tp2Result)
+            Print("TP2 SELL_LIMIT placed: ", tp2Lots, " lots @ ", tp2Price);
+         else
+         {
+            Print("TP2 SELL_LIMIT failed: ", trade.ResultRetcodeDescription());
+            allLimitsPlaced = false;
+         }
+
+         // TP3 (if enabled)
+         if(inpNumberOfLevels == 3)
+         {
+            double tp3Lots = NormalizeDouble(calc.partialLots3, 2);
+            if(tp3Lots < minLot) tp3Lots = minLot;
+            if(tp3Lots > maxLot) tp3Lots = maxLot;
+            tp3Lots = MathFloor(tp3Lots / lotStep) * lotStep;
+
+            double tp3Price = NormalizeDouble(calc.partialTP3Price, g_Digits);
+            bool tp3Result = trade.OrderOpen(_Symbol, ORDER_TYPE_SELL_LIMIT, tp3Lots, 0, tp3Price, 0, 0, ORDER_TIME_GTC, 0, "TP3 @ " + DoubleToString(calc.partialPips3, 1) + " pips");
+
+            if(tp3Result)
+               Print("TP3 SELL_LIMIT placed: ", tp3Lots, " lots @ ", tp3Price);
+            else
+            {
+               Print("TP3 SELL_LIMIT failed: ", trade.ResultRetcodeDescription());
+               allLimitsPlaced = false;
+            }
+         }
+
+         if(allLimitsPlaced)
+            Comment("OK BUY Order & Partial Exit Limits Placed Successfully!\nLot Size: ", lots, "\nSL: ", sl);
+         else
+            Comment("OK BUY Order Placed, but some Partial Exit Limits Failed!\nCheck Journal for details.");
+      }
+      else
+      {
+         Print("BUY Order Failed: ", trade.ResultRetcodeDescription());
+         Comment("✗ BUY Order Failed: ", trade.ResultRetcodeDescription());
       }
    }
    else
@@ -2215,75 +2214,74 @@ void ExecuteSellOrder()
 
       if(result)
       {
-            Print("SELL Order Executed: Lot Size = ", lots, ", SL = ", sl);
+         Print("SELL Order Executed: Lot Size = ", lots, ", SL = ", sl);
 
-            // Now place BUY_LIMIT orders for partial exits
-            bool allLimitsPlaced = true;
+         // Now place BUY_LIMIT orders for partial exits
+         bool allLimitsPlaced = true;
 
-            // TP1
-            double tp1Lots = NormalizeDouble(calc.partialLots1, 2);
-            if(tp1Lots < minLot) tp1Lots = minLot;
-            if(tp1Lots > maxLot) tp1Lots = maxLot;
-            tp1Lots = MathFloor(tp1Lots / lotStep) * lotStep;
+         // TP1
+         double tp1Lots = NormalizeDouble(calc.partialLots1, 2);
+         if(tp1Lots < minLot) tp1Lots = minLot;
+         if(tp1Lots > maxLot) tp1Lots = maxLot;
+         tp1Lots = MathFloor(tp1Lots / lotStep) * lotStep;
 
-            double tp1Price = NormalizeDouble(calc.partialTP1Price, g_Digits);
-            bool tp1Result = trade.OrderOpen(_Symbol, ORDER_TYPE_BUY_LIMIT, tp1Lots, 0, tp1Price, 0, 0, ORDER_TIME_GTC, 0, "TP1 @ " + DoubleToString(calc.partialPips1, 1) + " pips");
+         double tp1Price = NormalizeDouble(calc.partialTP1Price, g_Digits);
+         bool tp1Result = trade.OrderOpen(_Symbol, ORDER_TYPE_BUY_LIMIT, tp1Lots, 0, tp1Price, 0, 0, ORDER_TIME_GTC, 0, "TP1 @ " + DoubleToString(calc.partialPips1, 1) + " pips");
 
-            if(tp1Result)
-               Print("TP1 BUY_LIMIT placed: ", tp1Lots, " lots @ ", tp1Price);
-            else
-            {
-               Print("TP1 BUY_LIMIT failed: ", trade.ResultRetcodeDescription());
-               allLimitsPlaced = false;
-            }
-
-            // TP2
-            double tp2Lots = NormalizeDouble(calc.partialLots2, 2);
-            if(tp2Lots < minLot) tp2Lots = minLot;
-            if(tp2Lots > maxLot) tp2Lots = maxLot;
-            tp2Lots = MathFloor(tp2Lots / lotStep) * lotStep;
-
-            double tp2Price = NormalizeDouble(calc.partialTP2Price, g_Digits);
-            bool tp2Result = trade.OrderOpen(_Symbol, ORDER_TYPE_BUY_LIMIT, tp2Lots, 0, tp2Price, 0, 0, ORDER_TIME_GTC, 0, "TP2 @ " + DoubleToString(calc.partialPips2, 1) + " pips");
-
-            if(tp2Result)
-               Print("TP2 BUY_LIMIT placed: ", tp2Lots, " lots @ ", tp2Price);
-            else
-            {
-               Print("TP2 BUY_LIMIT failed: ", trade.ResultRetcodeDescription());
-               allLimitsPlaced = false;
-            }
-
-            // TP3 (if enabled)
-            if(inpNumberOfLevels == 3)
-            {
-               double tp3Lots = NormalizeDouble(calc.partialLots3, 2);
-               if(tp3Lots < minLot) tp3Lots = minLot;
-               if(tp3Lots > maxLot) tp3Lots = maxLot;
-               tp3Lots = MathFloor(tp3Lots / lotStep) * lotStep;
-
-               double tp3Price = NormalizeDouble(calc.partialTP3Price, g_Digits);
-               bool tp3Result = trade.OrderOpen(_Symbol, ORDER_TYPE_BUY_LIMIT, tp3Lots, 0, tp3Price, 0, 0, ORDER_TIME_GTC, 0, "TP3 @ " + DoubleToString(calc.partialPips3, 1) + " pips");
-
-               if(tp3Result)
-                  Print("TP3 BUY_LIMIT placed: ", tp3Lots, " lots @ ", tp3Price);
-               else
-               {
-                  Print("TP3 BUY_LIMIT failed: ", trade.ResultRetcodeDescription());
-                  allLimitsPlaced = false;
-               }
-            }
-
-            if(allLimitsPlaced)
-               Comment("OK SELL Order & Partial Exit Limits Placed Successfully!\nLot Size: ", lots, "\nSL: ", sl);
-            else
-               Comment("OK SELL Order Placed, but some Partial Exit Limits Failed!\nCheck Journal for details.");
-         }
+         if(tp1Result)
+            Print("TP1 BUY_LIMIT placed: ", tp1Lots, " lots @ ", tp1Price);
          else
          {
-            Print("SELL Order Failed: ", trade.ResultRetcodeDescription());
-            Comment("✗ SELL Order Failed: ", trade.ResultRetcodeDescription());
+            Print("TP1 BUY_LIMIT failed: ", trade.ResultRetcodeDescription());
+            allLimitsPlaced = false;
          }
+
+         // TP2
+         double tp2Lots = NormalizeDouble(calc.partialLots2, 2);
+         if(tp2Lots < minLot) tp2Lots = minLot;
+         if(tp2Lots > maxLot) tp2Lots = maxLot;
+         tp2Lots = MathFloor(tp2Lots / lotStep) * lotStep;
+
+         double tp2Price = NormalizeDouble(calc.partialTP2Price, g_Digits);
+         bool tp2Result = trade.OrderOpen(_Symbol, ORDER_TYPE_BUY_LIMIT, tp2Lots, 0, tp2Price, 0, 0, ORDER_TIME_GTC, 0, "TP2 @ " + DoubleToString(calc.partialPips2, 1) + " pips");
+
+         if(tp2Result)
+            Print("TP2 BUY_LIMIT placed: ", tp2Lots, " lots @ ", tp2Price);
+         else
+         {
+            Print("TP2 BUY_LIMIT failed: ", trade.ResultRetcodeDescription());
+            allLimitsPlaced = false;
+         }
+
+         // TP3 (if enabled)
+         if(inpNumberOfLevels == 3)
+         {
+            double tp3Lots = NormalizeDouble(calc.partialLots3, 2);
+            if(tp3Lots < minLot) tp3Lots = minLot;
+            if(tp3Lots > maxLot) tp3Lots = maxLot;
+            tp3Lots = MathFloor(tp3Lots / lotStep) * lotStep;
+
+            double tp3Price = NormalizeDouble(calc.partialTP3Price, g_Digits);
+            bool tp3Result = trade.OrderOpen(_Symbol, ORDER_TYPE_BUY_LIMIT, tp3Lots, 0, tp3Price, 0, 0, ORDER_TIME_GTC, 0, "TP3 @ " + DoubleToString(calc.partialPips3, 1) + " pips");
+
+            if(tp3Result)
+               Print("TP3 BUY_LIMIT placed: ", tp3Lots, " lots @ ", tp3Price);
+            else
+            {
+               Print("TP3 BUY_LIMIT failed: ", trade.ResultRetcodeDescription());
+               allLimitsPlaced = false;
+            }
+         }
+
+         if(allLimitsPlaced)
+            Comment("OK SELL Order & Partial Exit Limits Placed Successfully!\nLot Size: ", lots, "\nSL: ", sl);
+         else
+            Comment("OK SELL Order Placed, but some Partial Exit Limits Failed!\nCheck Journal for details.");
+      }
+      else
+      {
+         Print("SELL Order Failed: ", trade.ResultRetcodeDescription());
+         Comment("✗ SELL Order Failed: ", trade.ResultRetcodeDescription());
       }
    }
    else
