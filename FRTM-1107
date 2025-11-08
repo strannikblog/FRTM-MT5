@@ -82,7 +82,7 @@ input string inpSLExecuteSoundFile = "alert.wav";            // Sound File Name
 input group "===== Break-Even - Auto Execution ====="
 input bool inpUseBETriggerLine = false;                     // Use BE Trigger Line (Manual BE Trigger)
 input double inpBEOffsetPips = 0.0;                         // BE Offset (pips above/below entry)
-input bool inpTrailSLToNextTP = false;                      // Trail SL to Next TP Level When Hit
+input bool inpTrailSLToNextTP = false;                      // Trail SL to Next TP Level
 input bool inpAutoExecuteAtBE = false;                      // Auto Execute at BE Line (Risk-Free Exit)
 input bool inpBEEnableAlert = true;                         // Enable Alert Notification
 input bool inpBEEnableSound = true;                         // Enable Sound Notification
