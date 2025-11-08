@@ -2567,147 +2567,146 @@ void UpdateLines()
       // Draw partial exit lines (always draggable)
       double exitPercent3 = (inpNumberOfLevels == 3) ? (100 - inpExitPercent1 - inpExitPercent2) : 0;
 
-         // Level 1
-         if(ObjectFind(0, g_PartialTP1LineName) < 0)
-         {
-            ObjectCreate(0, g_PartialTP1LineName, OBJ_TREND, 0, currentTime, calc.partialTP1Price, futureTime, calc.partialTP1Price);
-            ObjectSetInteger(0, g_PartialTP1LineName, OBJPROP_COLOR, inpTPLineColor);
-            ObjectSetInteger(0, g_PartialTP1LineName, OBJPROP_WIDTH, 2);
-            ObjectSetInteger(0, g_PartialTP1LineName, OBJPROP_STYLE, STYLE_SOLID);
-            ObjectSetInteger(0, g_PartialTP1LineName, OBJPROP_RAY_RIGHT, true);
-            ObjectSetString(0, g_PartialTP1LineName, OBJPROP_TEXT, "TP1: " + DoubleToString(inpExitPercent1, 0) + "% @ +" + DoubleToString(calc.partialPips1, 1) + " pips");
-         }
-         else
-         {
-            ObjectMove(0, g_PartialTP1LineName, 0, currentTime, calc.partialTP1Price);
-            ObjectMove(0, g_PartialTP1LineName, 1, futureTime, calc.partialTP1Price);
-            ObjectSetString(0, g_PartialTP1LineName, OBJPROP_TEXT, "TP1: " + DoubleToString(inpExitPercent1, 0) + "% @ +" + DoubleToString(calc.partialPips1, 1) + " pips");
-         }
-
-         // Make line always draggable
-         ObjectSetInteger(0, g_PartialTP1LineName, OBJPROP_SELECTABLE, true);
-
-         // Add text label for TP1
-         double slPips = (isDynamicSL) ? MathAbs(SymbolInfoDouble(_Symbol, SYMBOL_BID) - calc.slPrice) / g_PipValue : calc.slPips;
-         double rr1 = (slPips > 0) ? (calc.partialPips1 / slPips) : 0;
-         string tp1Label = "TP1: " + DoubleToString(inpExitPercent1, 0) + "% @ " + DoubleToString(calc.partialPips1, 1) + " pips";
-         if(inpMetricDisplay == METRIC_RR)
-         {
-            if(rr1 > 0) tp1Label += " | RR: " + DoubleToString(rr1, 2);
-         }
-         else // METRIC_PIP_DISTANCE
-         {
-            tp1Label += " | Pip Dist.: " + DoubleToString(calc.partialPipDistance1, 1);
-         }
-         tp1Label += " | Net: $" + DoubleToString(calc.partialNetPnL1, 2);
-
-         if(ObjectFind(0, g_PartialTP1LabelName) < 0)
-         {
-            ObjectCreate(0, g_PartialTP1LabelName, OBJ_TEXT, 0, TimeCurrent(), calc.partialTP1Price);
-            ObjectSetInteger(0, g_PartialTP1LabelName, OBJPROP_COLOR, inpTPLineColor);
-            ObjectSetInteger(0, g_PartialTP1LabelName, OBJPROP_FONTSIZE, 8);
-         }
-         UpdateLabelPosition(g_PartialTP1LabelName, calc.partialTP1Price, tp1Label);
-         
-         // Level 2
-         if(ObjectFind(0, g_PartialTP2LineName) < 0)
-         {
-            ObjectCreate(0, g_PartialTP2LineName, OBJ_TREND, 0, currentTime, calc.partialTP2Price, futureTime, calc.partialTP2Price);
-            ObjectSetInteger(0, g_PartialTP2LineName, OBJPROP_COLOR, inpTPLineColor);
-            ObjectSetInteger(0, g_PartialTP2LineName, OBJPROP_WIDTH, 2);
-            ObjectSetInteger(0, g_PartialTP2LineName, OBJPROP_STYLE, STYLE_SOLID);
-            ObjectSetInteger(0, g_PartialTP2LineName, OBJPROP_RAY_RIGHT, true);
-            ObjectSetString(0, g_PartialTP2LineName, OBJPROP_TEXT, "TP2: " + DoubleToString(inpExitPercent2, 0) + "% @ +" + DoubleToString(calc.partialPips2, 1) + " pips");
-         }
-         else
-         {
-            ObjectMove(0, g_PartialTP2LineName, 0, currentTime, calc.partialTP2Price);
-            ObjectMove(0, g_PartialTP2LineName, 1, futureTime, calc.partialTP2Price);
-            ObjectSetString(0, g_PartialTP2LineName, OBJPROP_TEXT, "TP2: " + DoubleToString(inpExitPercent2, 0) + "% @ +" + DoubleToString(calc.partialPips2, 1) + " pips");
-         }
-
-         // Make line always draggable
-         ObjectSetInteger(0, g_PartialTP2LineName, OBJPROP_SELECTABLE, true);
-
-         // Add text label for TP2
-         double rr2 = (slPips > 0) ? (calc.partialPips2 / slPips) : 0;
-         string tp2Label = "TP2: " + DoubleToString(inpExitPercent2, 0) + "% @ " + DoubleToString(calc.partialPips2, 1) + " pips";
-         if(inpMetricDisplay == METRIC_RR)
-         {
-            if(rr2 > 0) tp2Label += " | RR: " + DoubleToString(rr2, 2);
-         }
-         else // METRIC_PIP_DISTANCE
-         {
-            tp2Label += " | Pip Dist.: " + DoubleToString(calc.partialPipDistance2, 1);
-         }
-         tp2Label += " | Net: $" + DoubleToString(calc.partialNetPnL2, 2);
-
-         if(ObjectFind(0, g_PartialTP2LabelName) < 0)
-         {
-            ObjectCreate(0, g_PartialTP2LabelName, OBJ_TEXT, 0, TimeCurrent(), calc.partialTP2Price);
-            ObjectSetInteger(0, g_PartialTP2LabelName, OBJPROP_COLOR, inpTPLineColor);
-            ObjectSetInteger(0, g_PartialTP2LabelName, OBJPROP_FONTSIZE, 8);
-         }
-         UpdateLabelPosition(g_PartialTP2LabelName, calc.partialTP2Price, tp2Label);
-         
-         // Level 3 (if enabled)
-         if(inpNumberOfLevels == 3)
-         {
-            if(ObjectFind(0, g_PartialTP3LineName) < 0)
-            {
-               ObjectCreate(0, g_PartialTP3LineName, OBJ_TREND, 0, currentTime, calc.partialTP3Price, futureTime, calc.partialTP3Price);
-               ObjectSetInteger(0, g_PartialTP3LineName, OBJPROP_COLOR, inpTPLineColor);
-               ObjectSetInteger(0, g_PartialTP3LineName, OBJPROP_WIDTH, 2);
-               ObjectSetInteger(0, g_PartialTP3LineName, OBJPROP_STYLE, STYLE_DASH);
-               ObjectSetInteger(0, g_PartialTP3LineName, OBJPROP_RAY_RIGHT, true);
-               ObjectSetString(0, g_PartialTP3LineName, OBJPROP_TEXT, "TP3: " + DoubleToString(exitPercent3, 0) + "% @ +" + DoubleToString(calc.partialPips3, 1) + " pips");
-            }
-            else
-            {
-               ObjectMove(0, g_PartialTP3LineName, 0, currentTime, calc.partialTP3Price);
-               ObjectMove(0, g_PartialTP3LineName, 1, futureTime, calc.partialTP3Price);
-               ObjectSetString(0, g_PartialTP3LineName, OBJPROP_TEXT, "TP3: " + DoubleToString(exitPercent3, 0) + "% @ +" + DoubleToString(calc.partialPips3, 1) + " pips");
-            }
-
-            // Make line always draggable
-            ObjectSetInteger(0, g_PartialTP3LineName, OBJPROP_SELECTABLE, true);
-
-            // Add text label for TP3
-            double rr3 = (slPips > 0) ? (calc.partialPips3 / slPips) : 0;
-            string tp3Label = "TP3: " + DoubleToString(exitPercent3, 0) + "% @ " + DoubleToString(calc.partialPips3, 1) + " pips";
-            if(inpMetricDisplay == METRIC_RR)
-            {
-               if(rr3 > 0) tp3Label += " | RR: " + DoubleToString(rr3, 2);
-            }
-            else // METRIC_PIP_DISTANCE
-            {
-               tp3Label += " | Pip Dist.: " + DoubleToString(calc.partialPipDistance3, 1);
-            }
-            tp3Label += " | Net: $" + DoubleToString(calc.partialNetPnL3, 2);
-
-            if(ObjectFind(0, g_PartialTP3LabelName) < 0)
-            {
-               ObjectCreate(0, g_PartialTP3LabelName, OBJ_TEXT, 0, TimeCurrent(), calc.partialTP3Price);
-               ObjectSetInteger(0, g_PartialTP3LabelName, OBJPROP_COLOR, inpTPLineColor);
-               ObjectSetInteger(0, g_PartialTP3LabelName, OBJPROP_FONTSIZE, 8);
-            }
-            UpdateLabelPosition(g_PartialTP3LabelName, calc.partialTP3Price, tp3Label);
-         }
-         else
-         {
-            // Delete TP3 line and label if it exists but 2 levels selected
-            if(ObjectFind(0, g_PartialTP3LineName) >= 0)
-               ObjectDelete(0, g_PartialTP3LineName);
-            if(ObjectFind(0, g_PartialTP3LabelName) >= 0)
-               ObjectDelete(0, g_PartialTP3LabelName);
-         }
-
-         // Delete standard TP line and label if they exist (cleanup from old version)
-         if(ObjectFind(0, g_TPLineName) >= 0)
-            ObjectDelete(0, g_TPLineName);
-         if(ObjectFind(0, g_TPLabelName) >= 0)
-            ObjectDelete(0, g_TPLabelName);
+      // Level 1
+      if(ObjectFind(0, g_PartialTP1LineName) < 0)
+      {
+         ObjectCreate(0, g_PartialTP1LineName, OBJ_TREND, 0, currentTime, calc.partialTP1Price, futureTime, calc.partialTP1Price);
+         ObjectSetInteger(0, g_PartialTP1LineName, OBJPROP_COLOR, inpTPLineColor);
+         ObjectSetInteger(0, g_PartialTP1LineName, OBJPROP_WIDTH, 2);
+         ObjectSetInteger(0, g_PartialTP1LineName, OBJPROP_STYLE, STYLE_SOLID);
+         ObjectSetInteger(0, g_PartialTP1LineName, OBJPROP_RAY_RIGHT, true);
+         ObjectSetString(0, g_PartialTP1LineName, OBJPROP_TEXT, "TP1: " + DoubleToString(inpExitPercent1, 0) + "% @ +" + DoubleToString(calc.partialPips1, 1) + " pips");
       }
+      else
+      {
+         ObjectMove(0, g_PartialTP1LineName, 0, currentTime, calc.partialTP1Price);
+         ObjectMove(0, g_PartialTP1LineName, 1, futureTime, calc.partialTP1Price);
+         ObjectSetString(0, g_PartialTP1LineName, OBJPROP_TEXT, "TP1: " + DoubleToString(inpExitPercent1, 0) + "% @ +" + DoubleToString(calc.partialPips1, 1) + " pips");
+      }
+
+      // Make line always draggable
+      ObjectSetInteger(0, g_PartialTP1LineName, OBJPROP_SELECTABLE, true);
+
+      // Add text label for TP1
+      double slPips = (isDynamicSL) ? MathAbs(SymbolInfoDouble(_Symbol, SYMBOL_BID) - calc.slPrice) / g_PipValue : calc.slPips;
+      double rr1 = (slPips > 0) ? (calc.partialPips1 / slPips) : 0;
+      string tp1Label = "TP1: " + DoubleToString(inpExitPercent1, 0) + "% @ " + DoubleToString(calc.partialPips1, 1) + " pips";
+      if(inpMetricDisplay == METRIC_RR)
+      {
+         if(rr1 > 0) tp1Label += " | RR: " + DoubleToString(rr1, 2);
+      }
+      else // METRIC_PIP_DISTANCE
+      {
+         tp1Label += " | Pip Dist.: " + DoubleToString(calc.partialPipDistance1, 1);
+      }
+      tp1Label += " | Net: $" + DoubleToString(calc.partialNetPnL1, 2);
+
+      if(ObjectFind(0, g_PartialTP1LabelName) < 0)
+      {
+         ObjectCreate(0, g_PartialTP1LabelName, OBJ_TEXT, 0, TimeCurrent(), calc.partialTP1Price);
+         ObjectSetInteger(0, g_PartialTP1LabelName, OBJPROP_COLOR, inpTPLineColor);
+         ObjectSetInteger(0, g_PartialTP1LabelName, OBJPROP_FONTSIZE, 8);
+      }
+      UpdateLabelPosition(g_PartialTP1LabelName, calc.partialTP1Price, tp1Label);
+      
+      // Level 2
+      if(ObjectFind(0, g_PartialTP2LineName) < 0)
+      {
+         ObjectCreate(0, g_PartialTP2LineName, OBJ_TREND, 0, currentTime, calc.partialTP2Price, futureTime, calc.partialTP2Price);
+         ObjectSetInteger(0, g_PartialTP2LineName, OBJPROP_COLOR, inpTPLineColor);
+         ObjectSetInteger(0, g_PartialTP2LineName, OBJPROP_WIDTH, 2);
+         ObjectSetInteger(0, g_PartialTP2LineName, OBJPROP_STYLE, STYLE_SOLID);
+         ObjectSetInteger(0, g_PartialTP2LineName, OBJPROP_RAY_RIGHT, true);
+         ObjectSetString(0, g_PartialTP2LineName, OBJPROP_TEXT, "TP2: " + DoubleToString(inpExitPercent2, 0) + "% @ +" + DoubleToString(calc.partialPips2, 1) + " pips");
+      }
+      else
+      {
+         ObjectMove(0, g_PartialTP2LineName, 0, currentTime, calc.partialTP2Price);
+         ObjectMove(0, g_PartialTP2LineName, 1, futureTime, calc.partialTP2Price);
+         ObjectSetString(0, g_PartialTP2LineName, OBJPROP_TEXT, "TP2: " + DoubleToString(inpExitPercent2, 0) + "% @ +" + DoubleToString(calc.partialPips2, 1) + " pips");
+      }
+
+      // Make line always draggable
+      ObjectSetInteger(0, g_PartialTP2LineName, OBJPROP_SELECTABLE, true);
+
+      // Add text label for TP2
+      double rr2 = (slPips > 0) ? (calc.partialPips2 / slPips) : 0;
+      string tp2Label = "TP2: " + DoubleToString(inpExitPercent2, 0) + "% @ " + DoubleToString(calc.partialPips2, 1) + " pips";
+      if(inpMetricDisplay == METRIC_RR)
+      {
+         if(rr2 > 0) tp2Label += " | RR: " + DoubleToString(rr2, 2);
+      }
+      else // METRIC_PIP_DISTANCE
+      {
+         tp2Label += " | Pip Dist.: " + DoubleToString(calc.partialPipDistance2, 1);
+      }
+      tp2Label += " | Net: $" + DoubleToString(calc.partialNetPnL2, 2);
+
+      if(ObjectFind(0, g_PartialTP2LabelName) < 0)
+      {
+         ObjectCreate(0, g_PartialTP2LabelName, OBJ_TEXT, 0, TimeCurrent(), calc.partialTP2Price);
+         ObjectSetInteger(0, g_PartialTP2LabelName, OBJPROP_COLOR, inpTPLineColor);
+         ObjectSetInteger(0, g_PartialTP2LabelName, OBJPROP_FONTSIZE, 8);
+      }
+      UpdateLabelPosition(g_PartialTP2LabelName, calc.partialTP2Price, tp2Label);
+      
+      // Level 3 (if enabled)
+      if(inpNumberOfLevels == 3)
+      {
+         if(ObjectFind(0, g_PartialTP3LineName) < 0)
+         {
+            ObjectCreate(0, g_PartialTP3LineName, OBJ_TREND, 0, currentTime, calc.partialTP3Price, futureTime, calc.partialTP3Price);
+            ObjectSetInteger(0, g_PartialTP3LineName, OBJPROP_COLOR, inpTPLineColor);
+            ObjectSetInteger(0, g_PartialTP3LineName, OBJPROP_WIDTH, 2);
+            ObjectSetInteger(0, g_PartialTP3LineName, OBJPROP_STYLE, STYLE_DASH);
+            ObjectSetInteger(0, g_PartialTP3LineName, OBJPROP_RAY_RIGHT, true);
+            ObjectSetString(0, g_PartialTP3LineName, OBJPROP_TEXT, "TP3: " + DoubleToString(exitPercent3, 0) + "% @ +" + DoubleToString(calc.partialPips3, 1) + " pips");
+         }
+         else
+         {
+            ObjectMove(0, g_PartialTP3LineName, 0, currentTime, calc.partialTP3Price);
+            ObjectMove(0, g_PartialTP3LineName, 1, futureTime, calc.partialTP3Price);
+            ObjectSetString(0, g_PartialTP3LineName, OBJPROP_TEXT, "TP3: " + DoubleToString(exitPercent3, 0) + "% @ +" + DoubleToString(calc.partialPips3, 1) + " pips");
+         }
+
+         // Make line always draggable
+         ObjectSetInteger(0, g_PartialTP3LineName, OBJPROP_SELECTABLE, true);
+
+         // Add text label for TP3
+         double rr3 = (slPips > 0) ? (calc.partialPips3 / slPips) : 0;
+         string tp3Label = "TP3: " + DoubleToString(exitPercent3, 0) + "% @ " + DoubleToString(calc.partialPips3, 1) + " pips";
+         if(inpMetricDisplay == METRIC_RR)
+         {
+            if(rr3 > 0) tp3Label += " | RR: " + DoubleToString(rr3, 2);
+         }
+         else // METRIC_PIP_DISTANCE
+         {
+            tp3Label += " | Pip Dist.: " + DoubleToString(calc.partialPipDistance3, 1);
+         }
+         tp3Label += " | Net: $" + DoubleToString(calc.partialNetPnL3, 2);
+
+         if(ObjectFind(0, g_PartialTP3LabelName) < 0)
+         {
+            ObjectCreate(0, g_PartialTP3LabelName, OBJ_TEXT, 0, TimeCurrent(), calc.partialTP3Price);
+            ObjectSetInteger(0, g_PartialTP3LabelName, OBJPROP_COLOR, inpTPLineColor);
+            ObjectSetInteger(0, g_PartialTP3LabelName, OBJPROP_FONTSIZE, 8);
+         }
+         UpdateLabelPosition(g_PartialTP3LabelName, calc.partialTP3Price, tp3Label);
+      }
+      else
+      {
+         // Delete TP3 line and label if it exists but 2 levels selected
+         if(ObjectFind(0, g_PartialTP3LineName) >= 0)
+            ObjectDelete(0, g_PartialTP3LineName);
+         if(ObjectFind(0, g_PartialTP3LabelName) >= 0)
+            ObjectDelete(0, g_PartialTP3LabelName);
+      }
+
+      // Delete standard TP line and label if they exist (cleanup from old version)
+      if(ObjectFind(0, g_TPLineName) >= 0)
+         ObjectDelete(0, g_TPLineName);
+      if(ObjectFind(0, g_TPLabelName) >= 0)
+         ObjectDelete(0, g_TPLabelName);
    }
    
    // Entry Line
