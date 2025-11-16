@@ -165,9 +165,13 @@ input bool inpTPExecuteEnableEmail = false;                 // Enable Email Noti
 input string inpTPExecuteSoundFile = "alert.wav";           // Sound File Name
 
 //--- Account & Risk Settings
-input group "===== Account & Risk Settings ====="
-input double inpAccountSize = 100000;                       // Account Size (USD)
-input double inpRiskPercent = 0.25;                         // Risk % per Trade
+input group "===== Dynamic Risk Settings ====="
+input bool inpUseDynamicRisk = false;                        // Use RiskManager for risk%
+input bool inpUseDynamicAccountSize = false;                 // Use MT5 real-time equity
+
+input group "===== Manual Risk Settings ====="
+input double inpManualRiskPercent = 0.25;                    // Manual fallback risk%
+input double inpManualAccountSize = 100000;                  // Manual fallback account size
 input double inpMarginPercent = 3.0;                        // Margin Requirement %
 input double inpCommissionPerLot = 5.0;                     // Commission per Lot (Round-turn USD)
 input ENUM_ACCOUNT_MODE inpAccountMode = ACCOUNT_MODE_AUTO;     // Account Mode (Partial Close Method)
@@ -378,6 +382,21 @@ struct RiskCalculation
 
 RiskCalculation g_IdealCalc;
 RiskCalculation g_ConservativeCalc;
+
+//+------------------------------------------------------------------+
+//| Dynamic Risk Management Globals                                   |
+//+------------------------------------------------------------------+
+struct DynamicRiskData {
+    double currentRiskPercent;    // Risk% from RiskManager
+    datetime lastUpdate;          // File timestamp
+    bool fileReadSuccess;         // Read operation status
+    datetime lastReadTime;        // Last successful read
+};
+
+DynamicRiskData g_DynamicRisk;
+string g_RiskFileName = "RiskManager\\RiskManager_CurrentRisk.csv";
+datetime g_LastRiskFileCheck = 0;
+int g_RiskFileCacheSeconds = 300;  // 5-minute cache
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                    |
@@ -2397,7 +2416,8 @@ void CalculateRiskManagementMode()
       g_IdealCalc.totalRisk = g_IdealCalc.priceRisk + g_IdealCalc.commission + g_IdealCalc.spreadCost;
 
       // Risk percentage
-      g_IdealCalc.riskPercent = (inpAccountSize > 0) ? (g_IdealCalc.totalRisk / inpAccountSize * 100.0) : 0;
+      double effectiveAccountSize = GetEffectiveAccountSize();
+      g_IdealCalc.riskPercent = (effectiveAccountSize > 0) ? (g_IdealCalc.totalRisk / effectiveAccountSize * 100.0) : 0;
 
       // Break-even (locked from execution)
       g_IdealCalc.breakEvenPips = actualBEPips;
@@ -2416,6 +2436,120 @@ void CalculateRiskManagementMode()
 
       break;  // Only one position per symbol on netting account
    }
+}
+
+//+------------------------------------------------------------------+
+//| Read Dynamic Risk Data from RiskManager CSV File                 |
+//+------------------------------------------------------------------+
+bool ReadRiskFromFile(DynamicRiskData &riskData) {
+    // Check cache - only read file every 5 minutes
+    if(TimeCurrent() - g_LastRiskFileCheck < g_RiskFileCacheSeconds &&
+       riskData.fileReadSuccess) {
+        return true;  // Use cached data
+    }
+
+    g_LastRiskFileCheck = TimeCurrent();
+
+    int fileHandle = FileOpen(g_RiskFileName, FILE_READ | FILE_CSV | FILE_ANSI);
+    if(fileHandle == INVALID_HANDLE) {
+        riskData.fileReadSuccess = false;
+        return false;
+    }
+
+    // Read CSV format: "riskPercent,lastUpdate,timestamp"
+    if(!FileIsEnding(fileHandle)) {
+        string line = FileReadString(fileHandle);
+        FileClose(fileHandle);
+
+        string fields[];
+        int fieldCount = StringSplit(line, ',', fields);
+
+        if(fieldCount >= 3) {
+            riskData.currentRiskPercent = StringToDouble(fields[0]);
+            riskData.lastUpdate = StringToTime(fields[1]);
+            riskData.fileReadSuccess = true;
+            riskData.lastReadTime = TimeCurrent();
+            return true;
+        }
+    }
+
+    FileClose(fileHandle);
+    riskData.fileReadSuccess = false;
+    return false;
+}
+
+//+------------------------------------------------------------------+
+//| Validate Risk Data is Recent and Within Bounds                   |
+//+------------------------------------------------------------------+
+bool ValidateRiskData(const DynamicRiskData &riskData) {
+    if(!riskData.fileReadSuccess) return false;
+
+    // Check if data is stale (older than 24 hours)
+    if(TimeCurrent() - riskData.lastUpdate > 86400) {
+        Print("⚠️ RiskManager data is stale (>24 hours old)");
+        return false;
+    }
+
+    // Validate risk% is within reasonable bounds (0.01% to 10%)
+    if(riskData.currentRiskPercent < 0.01 || riskData.currentRiskPercent > 10.0) {
+        Print("⚠️ Invalid risk% from RiskManager: ", riskData.currentRiskPercent);
+        return false;
+    }
+
+    return true;
+}
+
+//+------------------------------------------------------------------+
+//| Show Dialog When RiskManager Data is Unavailable                 |
+//+------------------------------------------------------------------+
+void ShowRiskDataErrorDialog() {
+    static datetime lastWarning = 0;
+
+    // Show warning only once per hour to avoid spam
+    if(TimeCurrent() - lastWarning < 3600) return;
+
+    string message = "⚠️ RISK MANAGER DATA UNAVAILABLE\n\n";
+    message += "Dynamic Risk is enabled but RiskManager file cannot be read.\n";
+    message += "Falling back to Manual Risk: " + DoubleToString(inpManualRiskPercent, 2) + "%\n\n";
+    message += "File: " + g_RiskFileName + "\n\n";
+    message += "Solutions:\n";
+    message += "1. Ensure RiskManager indicator is running\n";
+    message += "2. Check file permissions\n";
+    message += "3. Disable Dynamic Risk in EA settings\n";
+
+    Alert(message);
+    lastWarning = TimeCurrent();
+}
+
+//+------------------------------------------------------------------+
+//| Get Effective Risk Percent (Dynamic or Manual)                   |
+//+------------------------------------------------------------------+
+double GetEffectiveRiskPercent() {
+    if(!inpUseDynamicRisk) {
+        return inpManualRiskPercent;  // Manual mode
+    }
+
+    // Attempt to read dynamic risk
+    if(ReadRiskFromFile(g_DynamicRisk) && ValidateRiskData(g_DynamicRisk)) {
+        return g_DynamicRisk.currentRiskPercent;
+    }
+
+    // Fallback to manual if dynamic fails
+    ShowRiskDataErrorDialog();
+    Print("⚠️ RiskManager unavailable - using manual risk: ", inpManualRiskPercent, "%");
+    return inpManualRiskPercent;
+}
+
+//+------------------------------------------------------------------+
+//| Get Effective Account Size (Dynamic Equity or Manual)            |
+//+------------------------------------------------------------------+
+double GetEffectiveAccountSize() {
+    if(inpUseDynamicAccountSize) {
+        double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+        if(equity > 0) return equity;
+        Print("⚠️ Failed to get account equity - using manual: ", inpManualAccountSize);
+    }
+    return inpManualAccountSize;
 }
 
 //+------------------------------------------------------------------+
@@ -2572,7 +2706,9 @@ void CalculateRisk()
 
    //--- IDEAL CALCULATION (No Entry Slippage)
    double idealTotalPips = slPips + spreadCostPips + exitSlippagePips;
-   double riskAmount = inpAccountSize * (inpRiskPercent / 100.0);
+   double effectiveRiskPercent = GetEffectiveRiskPercent();
+   double effectiveAccountSize = GetEffectiveAccountSize();
+   double riskAmount = effectiveAccountSize * (effectiveRiskPercent / 100.0);
    
    // Calculate pip value in USD for the lot size calculation
    double pipValuePerLot = (inpPipValueMode == PIP_MANUAL) ? inpManualPipValue : (g_PointValue * (g_PipValue / g_Point));
@@ -2584,7 +2720,7 @@ void CalculateRisk()
    g_IdealCalc.spreadCost = g_IdealCalc.lotSize * spreadCostPips * pipValuePerLot;
    g_IdealCalc.priceRisk = g_IdealCalc.lotSize * (slPips + exitSlippagePips) * pipValuePerLot;  // Price risk excludes spread cost
    g_IdealCalc.totalRisk = g_IdealCalc.priceRisk + g_IdealCalc.spreadCost + g_IdealCalc.commission;
-   g_IdealCalc.riskPercent = (g_IdealCalc.totalRisk / inpAccountSize) * 100.0;
+   g_IdealCalc.riskPercent = (g_IdealCalc.totalRisk / effectiveAccountSize) * 100.0;
    g_IdealCalc.entryPrice = currentPrice;
    g_IdealCalc.slPrice = slPrice;
    
@@ -2600,7 +2736,7 @@ void CalculateRisk()
    double idealContractValue = g_IdealCalc.lotSize * 100000;
    double idealNotionalUSD = idealContractValue * currentPrice;
    g_IdealCalc.marginRequired = idealNotionalUSD * (inpMarginPercent / 100.0);
-   g_IdealCalc.buyingPowerPercent = (g_IdealCalc.marginRequired / inpAccountSize) * 100.0;
+   g_IdealCalc.buyingPowerPercent = (g_IdealCalc.marginRequired / effectiveAccountSize) * 100.0;
    g_IdealCalc.returnOnMargin = g_IdealCalc.marginRequired > 0 ? (g_IdealCalc.netTP / g_IdealCalc.marginRequired) * 100.0 : 0;
    
    //--- CONSERVATIVE CALCULATION (With Entry Slippage)
@@ -2614,7 +2750,7 @@ void CalculateRisk()
    g_ConservativeCalc.spreadCost = g_ConservativeCalc.lotSize * spreadCostPips * pipValuePerLot;
    g_ConservativeCalc.priceRisk = g_ConservativeCalc.lotSize * (effectiveSL + exitSlippagePips) * pipValuePerLot;  // Price risk excludes spread cost
    g_ConservativeCalc.totalRisk = g_ConservativeCalc.priceRisk + g_ConservativeCalc.spreadCost + g_ConservativeCalc.commission;
-   g_ConservativeCalc.riskPercent = (g_ConservativeCalc.totalRisk / inpAccountSize) * 100.0;
+   g_ConservativeCalc.riskPercent = (g_ConservativeCalc.totalRisk / effectiveAccountSize) * 100.0;
    // Entry price accounting for slippage based on direction
    g_ConservativeCalc.entryPrice = isLongTrade ? (currentPrice + (inpEntrySlippage * g_PipValue)) : (currentPrice - (inpEntrySlippage * g_PipValue));
    g_ConservativeCalc.slPrice = slPrice;
@@ -2631,7 +2767,7 @@ void CalculateRisk()
    double conservativeContractValue = g_ConservativeCalc.lotSize * 100000;
    double conservativeNotionalUSD = conservativeContractValue * currentPrice;
    g_ConservativeCalc.marginRequired = conservativeNotionalUSD * (inpMarginPercent / 100.0);
-   g_ConservativeCalc.buyingPowerPercent = (g_ConservativeCalc.marginRequired / inpAccountSize) * 100.0;
+   g_ConservativeCalc.buyingPowerPercent = (g_ConservativeCalc.marginRequired / effectiveAccountSize) * 100.0;
    g_ConservativeCalc.returnOnMargin = g_ConservativeCalc.marginRequired > 0 ? (g_ConservativeCalc.netTP / g_ConservativeCalc.marginRequired) * 100.0 : 0;
    
    //--- PARTIAL EXITS CALCULATION
@@ -2762,7 +2898,23 @@ void UpdatePanel()
       CreateLabel("PipValueValue", "$" + DoubleToString(pipValuePerLot, 2), x + 180, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
       currentRow++;
    }
-   
+
+   // Risk Source Display
+   string riskSource = inpUseDynamicRisk ? "DYNAMIC" : "MANUAL";
+   color riskSourceColor = inpUseDynamicRisk ? (g_DynamicRisk.fileReadSuccess ? clrLime : clrOrange) : clrDodgerBlue;
+   double effectiveRisk = GetEffectiveRiskPercent();
+   CreateLabel("RiskSourceLabel", "Risk Source:", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
+   CreateLabel("RiskSourceValue", riskSource + " (" + DoubleToString(effectiveRisk, 2) + "%)", x + 180, y + (currentRow * rowHeight), riskSourceColor, inpFontSizeNormal, "Arial");
+   currentRow++;
+
+   // Account Size Source Display
+   string accountSource = inpUseDynamicAccountSize ? "EQUITY" : "MANUAL";
+   color accountSourceColor = inpUseDynamicAccountSize ? clrLime : clrDodgerBlue;
+   double effectiveAccount = GetEffectiveAccountSize();
+   CreateLabel("AccountSourceLabel", "Account Source:", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
+   CreateLabel("AccountSourceValue", accountSource + " ($" + DoubleToString(effectiveAccount, 0) + ")", x + 180, y + (currentRow * rowHeight), accountSourceColor, inpFontSizeNormal, "Arial");
+   currentRow++;
+
    currentRow++;
    CreateLabel("Divider1", GetDivider(), x, y + (currentRow * rowHeight), clrGray, inpFontSizeNormal, "Arial");
    currentRow++;
@@ -5057,9 +5209,11 @@ void SaveToSetFile()
    FileWriteString(fileHandle, "inpExitPercent1=" + DoubleToString(inpExitPercent1, 1) + "||Y\n");
    FileWriteString(fileHandle, "inpExitPercent2=" + DoubleToString(inpExitPercent2, 1) + "||Y\n");
 
-   // Account & Risk
-   FileWriteString(fileHandle, "inpAccountSize=" + DoubleToString(inpAccountSize, 2) + "||Y\n");
-   FileWriteString(fileHandle, "inpRiskPercent=" + DoubleToString(inpRiskPercent, 2) + "||Y\n");
+   // Account & Risk - Dynamic Risk Settings
+   FileWriteString(fileHandle, "inpUseDynamicRisk=" + (inpUseDynamicRisk ? "1" : "0") + "||Y\n");
+   FileWriteString(fileHandle, "inpUseDynamicAccountSize=" + (inpUseDynamicAccountSize ? "1" : "0") + "||Y\n");
+   FileWriteString(fileHandle, "inpManualRiskPercent=" + DoubleToString(inpManualRiskPercent, 2) + "||Y\n");
+   FileWriteString(fileHandle, "inpManualAccountSize=" + DoubleToString(inpManualAccountSize, 2) + "||Y\n");
    FileWriteString(fileHandle, "inpMarginPercent=" + DoubleToString(inpMarginPercent, 2) + "||Y\n");
    FileWriteString(fileHandle, "inpCommissionPerLot=" + DoubleToString(inpCommissionPerLot, 2) + "||Y\n");
    FileWriteString(fileHandle, "inpPipValueMode=" + IntegerToString(inpPipValueMode) + "||Y\n");
