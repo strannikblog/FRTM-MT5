@@ -2903,17 +2903,15 @@ void UpdatePanel()
    // Risk Source Display
    string riskSource = inpUseDynamicRisk ? "Dynamic" : "Manual";
    color riskSourceColor = inpUseDynamicRisk ? (g_DynamicRisk.fileReadSuccess ? clrGreen : clrOrange) : clrDodgerBlue;
-   double effectiveRisk = GetEffectiveRiskPercent();
    CreateLabel("RiskSourceLabel", "Risk Source:", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
-   CreateLabel("RiskSourceValue", riskSource + " (" + DoubleToString(effectiveRisk, 2) + "%)", x + 180, y + (currentRow * rowHeight), riskSourceColor, inpFontSizeNormal, "Arial");
+   CreateLabel("RiskSourceValue", riskSource, x + 180, y + (currentRow * rowHeight), riskSourceColor, inpFontSizeNormal, "Arial");
    currentRow++;
 
    // Account Size Source Display
    string accountSource = inpUseDynamicAccountSize ? "Equity" : "Manual";
    color accountSourceColor = inpUseDynamicAccountSize ? clrGreen : clrDodgerBlue;
-   double effectiveAccount = GetEffectiveAccountSize();
    CreateLabel("AccountSourceLabel", "Account Source:", x, y + (currentRow * rowHeight), inpPanelTextColor, inpFontSizeNormal, "Arial");
-   CreateLabel("AccountSourceValue", accountSource + " ($" + DoubleToString(effectiveAccount, 0) + ")", x + 180, y + (currentRow * rowHeight), accountSourceColor, inpFontSizeNormal, "Arial");
+   CreateLabel("AccountSourceValue", accountSource, x + 180, y + (currentRow * rowHeight), accountSourceColor, inpFontSizeNormal, "Arial");
    currentRow++;
 
    currentRow++;
